@@ -1,5 +1,5 @@
 ***This repository centralizes automation tools designed to optimize the workflow for DAZ 3D resource management.***
-### 📂 Render-State to JDownloader (Userscript)
+## 📂 Render-State to JDownloader (Userscript)
 
 The Tampermonkey userscript fully automates the link retrieval chain from Render-State all the way to your JDownloader 2 instance.
 #### ✨ Features
