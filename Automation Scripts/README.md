@@ -27,4 +27,4 @@ Why Version 1.5.0?
 [!IMPORTANT] This version utilizes a Direct Script Injection technique. By injecting code directly into the page's DOM, it bypasses the Tampermonkey "Sandbox," allowing the script to call the site's native functions (like oItem()) while maintaining high-level privileges for clipboard management and tab control.
 
 ***Developer Note for Git***
-When uploading to your repository, name the file render-state-jdownloader.user.js. This naming convention allows Tampermonkey to recognize the file and offer an "Install" button when viewing the raw file on Git.
+- When uploading to your repository, name the file render-state-jdownloader.user.js. This naming convention allows Tampermonkey to recognize the file and offer an "Install" button when viewing the raw file on Git.
