@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Render-State to JDownloader
-// @version      1.6.4
-// @description  Automates link retrieval, auto-clicks MediaFire, and sends links to JDownloader
-// @author       Tonino Di Giacomo
+// @version      1.6.7
+// @description  Automates link retrieval. Priority: MediaFire > Google Drive. Sends links to JDownloader.
+// @author       Gemini
 // @match        *://render-state.to/*
 // @match        *://*.mediafire.com/*
+// @match        *://drive.google.com/*
 // @match        *://ouo.io/*
 // @match        *://ouo.press/*
 // @grant        GM_setClipboard
@@ -15,7 +16,7 @@
 (function() {
     'use strict';
 
-    // 1. GLOBAL INTERCEPTION: Redirige window.open vers l'onglet actuel
+    // 1. GLOBAL INTERCEPTION
     window.open = function(url) {
         if (url) window.location.href = url;
         return null;
@@ -33,53 +34,48 @@
         injectScript(function() {
             window.open = function(url) { if (url) window.location.href = url; return null; };
 
-            const rewriteAndClickLinks = () => {
-                // Cible spécifiquement les boutons MediaFire
-                const mfLinks = document.querySelectorAll('a.btnd.ext-link');
-                mfLinks.forEach(link => {
-                    if (link.innerText.includes('MEDIAFIRE')) {
-                        // Force l'ouverture dans le même onglet
-                        if (link.getAttribute('target') !== '_self') {
-                            link.setAttribute('target', '_self');
-                            link.setAttribute('rel', 'noopener noreferrer');
-                        }
+            const findBestLinkAndClick = () => {
+                const links = Array.from(document.querySelectorAll('a.btnd'));
+                if (links.length === 0) return;
 
-                        // Supprime le JS en ligne qui pourrait ouvrir de nouveaux onglets
-                        link.removeAttribute('onclick');
+                // On cherche MediaFire en priorité
+                let targetLink = links.find(l => l.innerText.toUpperCase().includes('MEDIAFIRE'));
 
-                        // --- AJOUT : CLIC AUTOMATIQUE ---
-                        // On utilise un attribut pour ne cliquer qu'une seule fois
-                        if (!link.hasAttribute('data-auto-clicked')) {
-                            link.setAttribute('data-auto-clicked', 'true');
-                            console.log("Clic automatique sur le bouton MEDIAFIRE...");
-                            link.click();
-                        }
-                    }
-                });
+                // Si pas de MediaFire, on cherche Google Drive
+                if (!targetLink) {
+                    targetLink = links.find(l => l.innerText.toUpperCase().includes('GOOGLE DRIVE'));
+                }
+
+                if (targetLink && !targetLink.hasAttribute('data-auto-clicked')) {
+                    targetLink.setAttribute('data-auto-clicked', 'true');
+                    targetLink.setAttribute('target', '_self');
+                    console.log("Cible trouvée (" + targetLink.innerText.trim() + "). Redirection...");
+                    targetLink.click();
+                }
             };
 
-            // Lance le réécrivain et le cliqueur toutes les 500ms
-            setInterval(rewriteAndClickLinks, 500);
-
-            // Automatisation des étapes intermédiaires (Process & Download)
-            setInterval(() => {
-                const process = document.querySelector('.btn_down_text:not([data-done])');
-                if (process && process.innerText.trim() === "Process link") {
-                    process.setAttribute('data-done', 'true');
-                    process.click();
-                    if (process.parentElement) process.parentElement.click();
-                }
-
-                const btnDownload = document.getElementById('wpsafe-link');
+            const handleDownloadPage = () => {
+                const btnDownload = document.getElementById('downloadBtn');
                 if (btnDownload && !btnDownload.hasAttribute('data-done')) {
-                    const span = btnDownload.querySelector('.btn_down_text');
-                    if (span && span.innerText.trim() === "Download") {
+                    if (btnDownload.innerText.toUpperCase().includes("DOWNLOAD NOW")) {
                         btnDownload.setAttribute('data-done', 'true');
-                        if (typeof window.oItem === 'function') window.oItem();
-                        else btnDownload.click();
+
+                        // Tentative native
+                        if (typeof window.clickDownload === 'function') {
+                            window.clickDownload();
+                        }
+
+                        // Simulation d'événement forcée
+                        const event = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
+                        const span = btnDownload.querySelector('.btn-text');
+                        if (span) span.dispatchEvent(event);
+                        btnDownload.dispatchEvent(event);
                     }
                 }
-            }, 1000);
+            };
+
+            setInterval(findBestLinkAndClick, 500);
+            setInterval(handleDownloadPage, 1000);
         });
     }
 
@@ -94,16 +90,31 @@
         }, 1000);
     }
 
-    // --- PAGE FINALE MEDIAFIRE (Capture & Fermeture) ---
-    if (window.location.host.includes('mediafire.com')) {
-        const checkMf = setInterval(() => {
-            const finalBtn = document.querySelector('#downloadButton');
-            if (finalBtn && !document.body.hasAttribute('data-copied')) {
-                document.body.setAttribute('data-copied', 'true');
-                GM_setClipboard(finalBtn.href);
-                clearInterval(checkMf);
-                setTimeout(() => window.close(), 2500);
+    // --- PAGES FINALES (Capture & Fermeture) ---
+    const captureFinalLink = () => {
+        let linkToCopy = null;
+
+        // Cas MediaFire
+        if (window.location.host.includes('mediafire.com')) {
+            const mfBtn = document.querySelector('#downloadButton');
+            if (mfBtn) linkToCopy = mfBtn.href;
+        }
+        // Cas Google Drive (On copie l'URL actuelle si c'est une page de fichier)
+        else if (window.location.host.includes('drive.google.com')) {
+            if (window.location.href.includes('/file/d/')) {
+                linkToCopy = window.location.href;
             }
-        }, 1000);
+        }
+
+        if (linkToCopy && !document.body.hasAttribute('data-copied')) {
+            document.body.setAttribute('data-copied', 'true');
+            GM_setClipboard(linkToCopy);
+            console.log("Lien envoyé à JDownloader !");
+            setTimeout(() => window.close(), 2000);
+        }
+    };
+
+    if (window.location.host.includes('mediafire.com') || window.location.host.includes('drive.google.com')) {
+        setInterval(captureFinalLink, 1000);
     }
 })();
